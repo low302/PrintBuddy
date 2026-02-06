@@ -1,19 +1,37 @@
-import { useEffect, useMemo, useState } from 'react';
-import ThreeViewer from './components/ThreeViewer.jsx';
+import { useEffect, useMemo, useState } from "react";
+import ThreeViewer from "./components/ThreeViewer.jsx";
+import { Badge } from "./components/ui/badge.jsx";
+import { Button } from "./components/ui/button.jsx";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./components/ui/card.jsx";
+import { Input } from "./components/ui/input.jsx";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./components/ui/table.jsx";
 
-const API_BASE = import.meta.env.VITE_API_BASE || '';
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 const sidebarItems = [
-  { label: 'Library', id: 'library' },
-  { label: 'Uploads', id: 'uploads' },
-  { label: 'Tags', id: 'tags' },
-  { label: 'Reports', id: 'reports' }
+  { label: "Library", id: "library" },
+  { label: "Uploads", id: "uploads" },
+  { label: "Tags", id: "tags" },
+  { label: "Reports", id: "reports" },
 ];
 
 function formatBytes(bytes) {
-  if (bytes === 0) return '0 B';
+  if (bytes === 0) return "0 B";
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 }
@@ -24,10 +42,10 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const filteredFiles = useMemo(() => {
-    if (statusFilter === 'all') return files;
+    if (statusFilter === "all") return files;
     return files.filter((file) => file.extension === statusFilter);
   }, [files, statusFilter]);
 
@@ -41,7 +59,7 @@ export default function App() {
         setSelectedFile(data.items[0]);
       }
     } catch (error) {
-      console.error('Failed to load files', error);
+      console.error("Failed to load files", error);
     } finally {
       setIsLoading(false);
     }
@@ -58,14 +76,14 @@ export default function App() {
     if (!fileInput.files[0]) return;
 
     const body = new FormData();
-    body.append('file', fileInput.files[0]);
+    body.append("file", fileInput.files[0]);
 
     try {
       const response = await fetch(`${API_BASE}/api/files`, {
-        method: 'POST',
-        body
+        method: "POST",
+        body,
       });
-      if (!response.ok) throw new Error('Upload failed');
+      if (!response.ok) throw new Error("Upload failed");
       setIsUploadOpen(false);
       form.reset();
       await loadFiles();
@@ -76,7 +94,7 @@ export default function App() {
 
   const handleDelete = async (file) => {
     if (!window.confirm(`Delete ${file.original_name}?`)) return;
-    await fetch(`${API_BASE}/api/files/${file.id}`, { method: 'DELETE' });
+    await fetch(`${API_BASE}/api/files/${file.id}`, { method: "DELETE" });
     if (selectedFile?.id === file.id) {
       setSelectedFile(null);
     }
@@ -84,7 +102,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(30,41,59,0.6),_rgba(2,6,23,1)_55%)] text-foreground">
       <div className="flex min-h-screen">
         <aside className="hidden w-16 flex-col items-center border-r border-neutral-800 bg-black py-6 text-white md:flex">
           <div className="mb-10 flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 text-sm font-bold">
@@ -104,248 +122,267 @@ export default function App() {
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xs">ZA</div>
         </aside>
 
-        <aside className="hidden w-64 flex-col border-r border-slate-800 bg-slate-900 md:flex">
-          <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+        <aside className="hidden w-64 flex-col border-r border-border bg-card/80 backdrop-blur md:flex">
+          <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <div>
-              <p className="text-sm font-semibold text-slate-100">PrintBuddy Storage</p>
-              <p className="text-xs text-slate-400">Local STL / 3MF vault</p>
+              <p className="text-sm font-semibold text-foreground">PrintBuddy Storage</p>
+              <p className="text-xs text-muted-foreground">Local STL / 3MF vault</p>
             </div>
-            <button className="btn btn-outline h-8 w-8 p-0" aria-label="Collapse">
+            <Button variant="outline" size="icon" aria-label="Collapse">
               <ChevronIcon />
-            </button>
+            </Button>
           </div>
           <div className="px-5 py-4">
             <div className="relative">
-              <input className="input pl-9" placeholder="Search files" />
-              <div className="pointer-events-none absolute left-3 top-2.5 text-slate-500">
+              <Input className="pl-9" placeholder="Search files" />
+              <div className="pointer-events-none absolute left-3 top-2.5 text-muted-foreground">
                 <SearchIcon />
               </div>
             </div>
           </div>
           <div className="px-5 pb-4">
-            <button className="btn btn-primary w-full" onClick={() => setIsUploadOpen(true)}>
+            <Button className="w-full" onClick={() => setIsUploadOpen(true)}>
               <PlusIcon />
               <span className="ml-2">Upload Model</span>
-            </button>
+            </Button>
           </div>
-          <div className="px-5 pb-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Filters</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {['all', 'stl', '3mf'].map((filter) => (
-                <button
+          <div className="px-5 pb-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filters</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {["all", "stl", "3mf"].map((filter) => (
+                <Button
                   key={filter}
-                  className={`badge ${statusFilter === filter ? 'border-slate-100 bg-slate-100 text-slate-900' : 'border-slate-700 text-slate-300'}`}
+                  size="sm"
+                  variant={statusFilter === filter ? "default" : "outline"}
+                  className="h-7 rounded-full px-3 text-[11px] uppercase"
                   onClick={() => setStatusFilter(filter)}
                 >
-                  {filter.toUpperCase()}
+                  {filter}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="px-5 pb-6">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Saved Searches</p>
+            <div className="mt-3 space-y-2">
+              {["Recent uploads", "High poly", "Production ready"].map((label) => (
+                <button
+                  key={label}
+                  className="w-full rounded-lg border border-border/80 bg-background/30 px-3 py-2 text-left text-xs text-muted-foreground transition hover:bg-accent/40"
+                >
+                  {label}
                 </button>
               ))}
             </div>
           </div>
-          <div className="px-5 pb-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Saved Searches</p>
-            <div className="mt-3 space-y-2">
-              <div className="rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-300">Recent uploads</div>
-              <div className="rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-300">High poly</div>
-              <div className="rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-300">Production ready</div>
-            </div>
-          </div>
         </aside>
 
-        <main className="flex-1">
-          <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-6 py-4 md:hidden">
+        <main className="min-w-0 flex-1">
+          <div className="flex items-center justify-between border-b border-border bg-card/70 px-6 py-4 backdrop-blur md:hidden">
             <div className="flex items-center gap-3">
-              <button className="btn btn-outline h-9 w-9 p-0" onClick={() => setIsMobileNavOpen(true)} aria-label="Open menu">
+              <Button variant="outline" size="icon" onClick={() => setIsMobileNavOpen(true)} aria-label="Open menu">
                 <MenuIcon />
-              </button>
+              </Button>
               <div>
-                <p className="text-sm font-semibold text-slate-100">PrintBuddy Storage</p>
-                <p className="text-xs text-slate-400">Local STL / 3MF vault</p>
+                <p className="text-sm font-semibold text-foreground">PrintBuddy Storage</p>
+                <p className="text-xs text-muted-foreground">Local STL / 3MF vault</p>
               </div>
             </div>
-            <button className="btn btn-primary h-9 px-3 text-xs" onClick={() => setIsUploadOpen(true)}>
+            <Button size="sm" onClick={() => setIsUploadOpen(true)}>
               Upload
-            </button>
+            </Button>
           </div>
-          <header className="border-b border-slate-800 bg-slate-900 px-6 py-5">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+
+          <header className="border-b border-border bg-card/60 px-6 py-5 backdrop-blur">
+            <div className="mx-auto flex w-full max-w-[1560px] flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-100">Model Library</h1>
-                <p className="text-sm text-slate-400">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">Model Library</h1>
+                <p className="text-sm text-muted-foreground">
                   {files.length} total assets · {filteredFiles.length} matching filters
                 </p>
               </div>
               <div className="flex gap-2">
-                <button className="btn btn-outline">Manage Tags</button>
-                <button className="btn btn-primary" onClick={() => setIsUploadOpen(true)}>
+                <Button variant="outline">Manage Tags</Button>
+                <Button onClick={() => setIsUploadOpen(true)}>
                   <UploadIcon />
                   <span className="ml-2">Upload</span>
-                </button>
+                </Button>
               </div>
             </div>
           </header>
 
-          <div className="grid gap-6 p-6 xl:grid-cols-[1.2fr_1fr]">
-            <section className="card p-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-100">Inventory</p>
-                  <p className="text-xs text-slate-400">STL and 3MF assets stored locally</p>
-                </div>
-                <button className="btn btn-secondary">Export CSV</button>
-              </div>
-              <div className="mt-4 overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="text-xs uppercase text-slate-400">
-                    <tr>
-                      <th className="py-2 pr-4">File</th>
-                      <th className="py-2 pr-4">Type</th>
-                      <th className="py-2 pr-4">Size</th>
-                      <th className="py-2 pr-4">Added</th>
-                      <th className="py-2 pr-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {isLoading && (
-                      <tr>
-                        <td className="py-4 text-slate-400" colSpan="5">
-                          Loading files...
-                        </td>
-                      </tr>
-                    )}
-                    {!isLoading && filteredFiles.length === 0 && (
-                      <tr>
-                        <td className="py-6 text-slate-400" colSpan="5">
-                          No files yet. Upload a STL or 3MF to begin.
-                        </td>
-                      </tr>
-                    )}
-                    {filteredFiles.map((file) => (
-                      <tr key={file.id} className="table-row border-t border-slate-800">
-                        <td className="py-3 pr-4">
-                          <div className="flex flex-col">
-                            <span className="font-medium text-slate-100">{file.original_name}</span>
-                            <span className="text-xs text-slate-400">{file.id}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 pr-4">
-                          <span className={`badge ${file.extension === 'stl' ? 'border-slate-700 bg-slate-800 text-slate-200' : 'border-slate-700 bg-slate-900 text-slate-200'}`}>
-                            {file.extension.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="py-3 pr-4 text-slate-300">{formatBytes(file.size)}</td>
-                        <td className="py-3 pr-4 text-slate-300">{new Date(file.created_at).toLocaleDateString()}</td>
-                        <td className="py-3 pr-4 text-right">
-                          <div className="flex justify-end gap-2">
-                            <button className="btn btn-outline" onClick={() => setSelectedFile(file)}>
-                              View
-                            </button>
-                            <a className="btn btn-outline" href={`${API_BASE}/api/files/${file.id}/file`}>
-                              Download
-                            </a>
-                            <button className="btn btn-outline" onClick={() => handleDelete(file)}>
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="card p-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-100">3D Preview</p>
-                  <p className="text-xs text-slate-400">Orbit, zoom, and inspect geometry</p>
-                </div>
-                {selectedFile && (
-                  <span className="badge border-slate-700 bg-slate-800 text-slate-200">
-                    {selectedFile.extension.toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <div className="mt-4">
-                {selectedFile ? (
-                  <ThreeViewer
-                    fileUrl={`${API_BASE}/api/files/${selectedFile.id}/file`}
-                    extension={selectedFile.extension}
-                  />
-                ) : (
-                  <div className="flex h-[360px] items-center justify-center rounded-lg border border-dashed border-slate-800 text-sm text-slate-400">
-                    Select a file to preview
+          <div className="mx-auto w-full max-w-[1560px] px-6 pb-10 pt-6">
+            <div className="grid gap-6 xl:min-h-[calc(100vh-220px)] xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] xl:items-stretch">
+              <Card className="flex h-full flex-col">
+                <CardHeader className="flex-row items-start justify-between space-y-0 border-b border-border pb-4">
+                  <div>
+                    <CardTitle>Inventory</CardTitle>
+                    <CardDescription>STL and 3MF assets stored locally</CardDescription>
                   </div>
-                )}
-              </div>
-            </section>
+                  <Button variant="secondary" size="sm">
+                    Export CSV
+                  </Button>
+                </CardHeader>
+                <CardContent className="flex-1 pt-4">
+                  <div className="h-full overflow-auto rounded-lg border border-border/70">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="pl-4">File</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Size</TableHead>
+                          <TableHead>Added</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {isLoading && (
+                          <TableRow>
+                            <TableCell className="py-6 text-muted-foreground" colSpan={5}>
+                              Loading files...
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {!isLoading && filteredFiles.length === 0 && (
+                          <TableRow>
+                            <TableCell className="py-8 text-muted-foreground" colSpan={5}>
+                              No files yet. Upload a STL or 3MF to begin.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {filteredFiles.map((file) => (
+                          <TableRow key={file.id}>
+                            <TableCell className="pl-4">
+                              <div className="flex flex-col">
+                                <span className="font-medium text-foreground">{file.original_name}</span>
+                                <span className="text-xs text-muted-foreground">{file.id}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="muted" className="uppercase">
+                                {file.extension}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">{formatBytes(file.size)}</TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {new Date(file.created_at).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex justify-end gap-2">
+                                <Button size="sm" variant="outline" onClick={() => setSelectedFile(file)}>
+                                  View
+                                </Button>
+                                <Button size="sm" variant="outline" asChild>
+                                  <a href={`${API_BASE}/api/files/${file.id}/file`}>Download</a>
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => handleDelete(file)}>
+                                  Delete
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="flex h-full flex-col">
+                <CardHeader className="flex-row items-start justify-between space-y-0 border-b border-border pb-4">
+                  <div>
+                    <CardTitle>3D Preview</CardTitle>
+                    <CardDescription>Orbit, zoom, and inspect geometry</CardDescription>
+                  </div>
+                  {selectedFile && (
+                    <Badge variant="secondary" className="uppercase">
+                      {selectedFile.extension}
+                    </Badge>
+                  )}
+                </CardHeader>
+                <CardContent className="flex-1 pt-4">
+                  {selectedFile ? (
+                    <ThreeViewer
+                      fileUrl={`${API_BASE}/api/files/${selectedFile.id}/file`}
+                      extension={selectedFile.extension}
+                      className="h-full min-h-[360px]"
+                    />
+                  ) : (
+                    <div className="flex h-full min-h-[360px] items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
+                      Select a file to preview
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </main>
       </div>
 
       {isUploadOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="card w-full max-w-xl p-6">
-            <div className="flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-xl">
+            <CardHeader className="flex-row items-start justify-between space-y-0">
               <div>
-                <h2 className="text-lg font-semibold text-slate-100">Upload STL or 3MF</h2>
-                <p className="text-sm text-slate-400">Files are stored locally in your server vault.</p>
+                <CardTitle>Upload STL or 3MF</CardTitle>
+                <CardDescription>Files are stored locally in your server vault.</CardDescription>
               </div>
-              <button className="btn btn-outline" onClick={() => setIsUploadOpen(false)}>
+              <Button variant="outline" size="sm" onClick={() => setIsUploadOpen(false)}>
                 Close
-              </button>
-            </div>
-            <form className="mt-4 space-y-4" onSubmit={handleUpload}>
-              <div>
-                <label className="text-sm font-medium text-slate-300">Model File</label>
-                <input name="file" type="file" accept=".stl,.3mf" className="input mt-2" required />
-              </div>
-              <div className="rounded-lg border border-dashed border-slate-800 p-4 text-xs text-slate-400">
-                Accepted: STL, 3MF. Larger models may take longer to preview.
-              </div>
-              <div className="flex justify-end gap-2">
-                <button type="button" className="btn btn-outline" onClick={() => setIsUploadOpen(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Upload File
-                </button>
-              </div>
-            </form>
-          </div>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <form className="space-y-4" onSubmit={handleUpload}>
+                <div>
+                  <label className="text-sm font-medium text-foreground">Model File</label>
+                  <Input name="file" type="file" accept=".stl,.3mf" className="mt-2" required />
+                </div>
+                <div className="rounded-lg border border-dashed border-border/80 bg-muted/40 p-4 text-xs text-muted-foreground">
+                  Accepted: STL, 3MF. Larger models may take longer to preview.
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setIsUploadOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit">Upload File</Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
         </div>
       )}
 
       {isMobileNavOpen && (
-        <div className="fixed inset-0 z-40 bg-black/30 md:hidden">
-          <div className="absolute inset-y-0 left-0 w-72 bg-slate-900 shadow-soft">
-            <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+        <div className="fixed inset-0 z-40 bg-black/50 md:hidden">
+          <div className="absolute inset-y-0 left-0 w-72 bg-card shadow-soft">
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <div>
-                <p className="text-sm font-semibold text-slate-100">PrintBuddy Storage</p>
-                <p className="text-xs text-slate-400">Local STL / 3MF vault</p>
+                <p className="text-sm font-semibold text-foreground">PrintBuddy Storage</p>
+                <p className="text-xs text-muted-foreground">Local STL / 3MF vault</p>
               </div>
-              <button className="btn btn-outline h-8 w-8 p-0" onClick={() => setIsMobileNavOpen(false)} aria-label="Close menu">
+              <Button variant="outline" size="icon" onClick={() => setIsMobileNavOpen(false)} aria-label="Close menu">
                 <CloseIcon />
-              </button>
+              </Button>
             </div>
             <div className="px-5 py-4">
-              <button className="btn btn-primary w-full" onClick={() => setIsUploadOpen(true)}>
+              <Button className="w-full" onClick={() => setIsUploadOpen(true)}>
                 <PlusIcon />
                 <span className="ml-2">Upload Model</span>
-              </button>
+              </Button>
             </div>
             <div className="px-5 pb-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Filters</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {['all', 'stl', '3mf'].map((filter) => (
-                  <button
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filters</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {["all", "stl", "3mf"].map((filter) => (
+                  <Button
                     key={filter}
-                    className={`badge ${statusFilter === filter ? 'border-slate-100 bg-slate-100 text-slate-900' : 'border-slate-700 text-slate-300'}`}
+                    size="sm"
+                    variant={statusFilter === filter ? "default" : "outline"}
+                    className="h-7 rounded-full px-3 text-[11px] uppercase"
                     onClick={() => setStatusFilter(filter)}
                   >
-                    {filter.toUpperCase()}
-                  </button>
+                    {filter}
+                  </Button>
                 ))}
               </div>
             </div>

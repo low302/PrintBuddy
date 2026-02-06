@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 
-export default function ThreeViewer({ fileUrl, extension }) {
+export default function ThreeViewer({ fileUrl, extension, className = "" }) {
   const mountRef = useRef(null);
 
   useEffect(() => {
@@ -101,5 +101,5 @@ export default function ThreeViewer({ fileUrl, extension }) {
     };
   }, [fileUrl]);
 
-  return <div ref={mountRef} className="h-[360px] w-full rounded-lg border border-slate-200" />;
+  return <div ref={mountRef} className={`w-full rounded-lg border border-border ${className}`} />;
 }

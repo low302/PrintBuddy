@@ -7,17 +7,44 @@
   line-height: 1.5;
   font-weight: 400;
   color-scheme: dark;
-  background-color: #0b1120;
-  color: #e2e8f0;
+  --background: 224 45% 6%;
+  --foreground: 210 40% 98%;
+  --card: 223 36% 10%;
+  --card-foreground: 210 40% 98%;
+  --popover: 223 36% 12%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 210 40% 98%;
+  --primary-foreground: 224 45% 12%;
+  --secondary: 217 32% 17%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217 32% 16%;
+  --muted-foreground: 214 17% 66%;
+  --accent: 217 32% 18%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62% 50%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 217 32% 22%;
+  --input: 217 32% 22%;
+  --ring: 210 40% 96%;
+  --radius: 0.75rem;
 }
 
 * {
   box-sizing: border-box;
 }
 
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
 body {
   margin: 0;
-  background-color: #0b1120;
 }
 
 ::-webkit-scrollbar {
@@ -32,45 +59,6 @@ body {
 
 ::-webkit-scrollbar-track {
   background: #0f172a;
-}
-
-.card {
-  @apply rounded-xl border border-slate-800 bg-slate-900 shadow-sm;
-}
-
-.badge {
-  @apply inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium;
-}
-
-.btn {
-  @apply inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200;
-}
-
-.btn-primary {
-  @apply bg-slate-100 text-slate-900 hover:bg-white;
-}
-
-.btn-outline {
-  @apply border border-slate-700 text-slate-200 hover:bg-slate-800;
-}
-
-.btn-secondary {
-  @apply bg-slate-800 text-slate-100 hover:bg-slate-700;
-}
-
-.input {
-  @apply h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100;
-}
-
-.input:focus {
-  outline: 2px solid transparent;
-  outline-offset: 2px;
-  border-color: #94a3b8;
-  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.25);
-}
-
-.table-row:hover {
-  background-color: rgba(15, 23, 42, 0.8);
 }
 
 @media (prefers-reduced-motion: reduce) {
