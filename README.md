@@ -28,6 +28,7 @@ Frontend runs on `http://localhost:4200`.
 - Files are stored in `backend/data/uploads`.
 - SQLite database is stored in `backend/data/files.sqlite`.
 - If you want to change the API base, set `VITE_API_BASE` in `frontend/.env`.
+- AI auto-tagging uses OpenAI. Set `OPENAI_API_KEY` (and optionally `OPENAI_MODEL=gpt-4o-mini`) in your environment.
 
 ## Docker Compose
 

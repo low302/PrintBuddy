@@ -11,6 +11,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = process.env.PORT || 4201;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
 const DATA_DIR = path.join(__dirname, 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const DB_PATH = path.join(DATA_DIR, 'files.sqlite');
@@ -116,6 +119,63 @@ const suggestTags = (filename, extension) => {
   return Array.from(tags).slice(0, 8);
 };
 
+const parseTagsFromText = (text) => {
+  if (!text) return [];
+  let payload = text.trim();
+  const match = payload.match(/\[[\s\S]*\]/);
+  if (match) {
+    payload = match[0];
+  }
+  try {
+    const parsed = JSON.parse(payload);
+    if (Array.isArray(parsed)) {
+      return normalizeTags(parsed);
+    }
+  } catch (error) {
+    return [];
+  }
+  return [];
+};
+
+const generateAiTags = async (file) => {
+  if (!OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is not configured.');
+  }
+  const prompt = `Generate 5-8 concise, lowercase tags (1-2 words) for a 3D model file. Respond with a JSON array only. File name: ${file.original_name}. Extension: ${file.extension}.`;
+  const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a tagging assistant. Return only a JSON array of tags.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.2,
+      max_tokens: 120
+    })
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`OpenAI error: ${response.status} ${errorBody}`);
+  }
+
+  const data = await response.json();
+  const text = data?.choices?.[0]?.message?.content?.trim();
+  const parsed = parseTagsFromText(text);
+  return parsed.length ? parsed.slice(0, 8) : suggestTags(file.original_name, file.extension);
+};
+
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
@@ -175,16 +235,20 @@ app.patch('/api/files/:id/tags', (req, res) => {
   res.json({ item: rowToItem(updated) });
 });
 
-app.post('/api/files/:id/autotag', (req, res) => {
+app.post('/api/files/:id/autotag', async (req, res) => {
   const item = findStmt.get(req.params.id);
   if (!item) {
     return res.status(404).json({ error: 'Not found' });
   }
-  const suggested = suggestTags(item.original_name, item.extension);
-  const serialized = serializeTags(suggested);
-  updateTagsStmt.run({ id: req.params.id, tags: serialized });
-  const updated = findStmt.get(req.params.id);
-  res.json({ item: rowToItem(updated), suggested });
+  try {
+    const suggested = await generateAiTags(item);
+    const serialized = serializeTags(suggested);
+    updateTagsStmt.run({ id: req.params.id, tags: serialized });
+    const updated = findStmt.get(req.params.id);
+    res.json({ item: rowToItem(updated), suggested });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Auto-tagging failed.' });
+  }
 });
 
 app.delete('/api/files/:id', (req, res) => {

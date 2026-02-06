@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import ThreeViewer from "./components/ThreeViewer.jsx";
+import ModelThumbnail from "./components/ModelThumbnail.jsx";
 import { Badge } from "./components/ui/badge.jsx";
 import { Button } from "./components/ui/button.jsx";
 import {
@@ -26,6 +27,19 @@ const sidebarItems = [
   { label: "Models", id: "models" },
   { label: "Tags", id: "tags" },
   { label: "Reports", id: "reports" },
+];
+
+const TAG_PRESETS = [
+  "bracket",
+  "enclosure",
+  "fixture",
+  "prototype",
+  "production",
+  "mount",
+  "jig",
+  "tooling",
+  "adapter",
+  "cover",
 ];
 
 function formatBytes(bytes) {
@@ -57,6 +71,11 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [tagFilter, setTagFilter] = useState("all");
   const [tagDraft, setTagDraft] = useState("");
+  const [bulkTagDraft, setBulkTagDraft] = useState("");
+  const [bulkMode, setBulkMode] = useState("add");
+  const [isBulkTagOpen, setIsBulkTagOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+
   const pageTitles = {
     library: "Model Library",
     models: "Models",
@@ -72,6 +91,12 @@ export default function App() {
     return Array.from(tags).sort();
   }, [files]);
 
+  const quickTags = useMemo(() => {
+    const dynamic = allTags.slice(0, 6);
+    const presets = TAG_PRESETS.filter((tag) => !dynamic.includes(tag)).slice(0, 6 - dynamic.length);
+    return [...dynamic, ...presets];
+  }, [allTags]);
+
   const filteredFiles = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return files.filter((file) => {
@@ -80,6 +105,7 @@ export default function App() {
       const matchesQuery =
         !query ||
         file.original_name.toLowerCase().includes(query) ||
+        file.id.toLowerCase().includes(query) ||
         (file.tags || []).some((tag) => tag.toLowerCase().includes(query));
       return matchesType && matchesTag && matchesQuery;
     });
@@ -141,6 +167,11 @@ export default function App() {
     if (selectedFile?.id === file.id) {
       setSelectedFile(null);
     }
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(file.id);
+      return next;
+    });
     await loadFiles();
   };
 
@@ -210,6 +241,64 @@ export default function App() {
   const handlePreview = (file) => {
     setSelectedFile(file);
     setIsPreviewOpen(true);
+  };
+
+  const toggleSelected = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const applyBulkTags = async ({ mode }) => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const tags = parseTags(bulkTagDraft);
+
+    await Promise.all(
+      ids.map(async (id) => {
+        const file = files.find((entry) => entry.id === id);
+        if (!file) return;
+        let nextTags = [];
+        if (mode === "clear") {
+          nextTags = [];
+        } else if (mode === "replace") {
+          nextTags = tags;
+        } else {
+          const existing = file.tags || [];
+          nextTags = Array.from(new Set([...existing, ...tags]));
+        }
+        await fetch(`${API_BASE}/api/files/${id}/tags`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tags: nextTags }),
+        });
+      })
+    );
+
+    setIsBulkTagOpen(false);
+    setBulkTagDraft("");
+    await loadFiles();
+  };
+
+  const appendPresetTag = (tag) => {
+    setBulkTagDraft((prev) => {
+      const existing = parseTags(prev);
+      const next = Array.from(new Set([...existing, tag]));
+      return next.join(", ");
+    });
+  };
+
+  const applyPresetToSelection = (tag) => {
+    if (selectedIds.size === 0) return;
+    appendPresetTag(tag);
+    setBulkMode("add");
+    setIsBulkTagOpen(true);
   };
 
   return (
@@ -338,7 +427,7 @@ export default function App() {
                   {files.length} total assets · {filteredFiles.length} matching filters
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={() => openTagEditor(selectedFile)}>
                   Manage Tags
                 </Button>
@@ -419,6 +508,36 @@ export default function App() {
                         Select a file to preview
                       </div>
                     )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="border-b border-border pb-4">
+                    <CardTitle>Quick Filters</CardTitle>
+                    <CardDescription>Jump to common tag groups</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant={tagFilter === "all" ? "default" : "outline"}
+                        className="h-7 rounded-full px-3 text-[11px] uppercase"
+                        onClick={() => setTagFilter("all")}
+                      >
+                        All tags
+                      </Button>
+                      {quickTags.map((tag) => (
+                        <Button
+                          key={tag}
+                          size="sm"
+                          variant={tagFilter === tag ? "default" : "outline"}
+                          className="h-7 rounded-full px-3 text-[11px] uppercase"
+                          onClick={() => setTagFilter(tag)}
+                        >
+                          {tag}
+                        </Button>
+                      ))}
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -548,7 +667,7 @@ export default function App() {
                         >
                           All tags
                         </Button>
-                        {allTags.slice(0, 6).map((tag) => (
+                        {quickTags.map((tag) => (
                           <Button
                             key={tag}
                             size="sm"
@@ -561,6 +680,56 @@ export default function App() {
                         ))}
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
+
+                {selectedIds.size > 0 && (
+                  <Card>
+                    <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{selectedIds.size} selected</p>
+                        <p className="text-xs text-muted-foreground">Apply bulk tagging or clear tags.</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="secondary" onClick={() => { setBulkMode("add"); setIsBulkTagOpen(true); }}>
+                          Add Tags
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => { setBulkMode("replace"); setIsBulkTagOpen(true); }}>
+                          Replace Tags
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => applyBulkTags({ mode: "clear" })}>
+                          Clear Tags
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>
+                          Clear Selection
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                <Card>
+                  <CardHeader className="border-b border-border pb-4">
+                    <CardTitle>Tag Presets</CardTitle>
+                    <CardDescription>Apply common tags to selected models quickly.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="flex flex-wrap gap-2">
+                      {TAG_PRESETS.map((tag) => (
+                        <Button
+                          key={tag}
+                          size="sm"
+                          variant="outline"
+                          className="h-7 rounded-full px-3 text-[11px] uppercase"
+                          onClick={() => applyPresetToSelection(tag)}
+                        >
+                          {tag}
+                        </Button>
+                      ))}
+                    </div>
+                    {selectedIds.size === 0 && (
+                      <p className="mt-3 text-xs text-muted-foreground">Select models to apply presets.</p>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -580,12 +749,26 @@ export default function App() {
                               <CardTitle className="text-base">{file.original_name}</CardTitle>
                               <CardDescription>{new Date(file.created_at).toLocaleDateString()}</CardDescription>
                             </div>
-                            <Badge variant="secondary" className="uppercase">
-                              {file.extension}
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border border-border bg-background text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                                  checked={selectedIds.has(file.id)}
+                                  onChange={() => toggleSelected(file.id)}
+                                />
+                              </label>
+                              <Badge variant="secondary" className="uppercase">
+                                {file.extension}
+                              </Badge>
+                            </div>
                           </div>
                         </CardHeader>
                         <CardContent className="flex flex-1 flex-col gap-4 pt-4">
+                          <ModelThumbnail
+                            fileUrl={`${API_BASE}/api/files/${file.id}/file`}
+                            extension={file.extension}
+                          />
                           <div className="rounded-lg border border-border/80 bg-muted/30 p-4 text-xs text-muted-foreground">
                             {formatBytes(file.size)} · {file.id}
                           </div>
@@ -609,6 +792,9 @@ export default function App() {
                             </Button>
                             <Button size="sm" variant="secondary" onClick={() => openTagEditor(file)}>
                               Tags
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => handleAutoTag(file)}>
+                              Auto Tag
                             </Button>
                           </div>
                         </CardContent>
@@ -708,6 +894,58 @@ export default function App() {
                 </Button>
                 <Button type="button" onClick={handleSaveTags}>
                   Save Tags
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {isBulkTagOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-lg">
+            <CardHeader className="flex-row items-start justify-between space-y-0">
+              <div>
+                <CardTitle>Bulk Tagging</CardTitle>
+                <CardDescription>
+                  {bulkMode === "replace"
+                    ? "Replace tags for selected models."
+                    : "Add tags to selected models."}
+                </CardDescription>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setIsBulkTagOpen(false)}>
+                Close
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-foreground">Tags</label>
+                <Input
+                  value={bulkTagDraft}
+                  onChange={(event) => setBulkTagDraft(event.target.value)}
+                  className="mt-2"
+                  placeholder="fixture, mount, production"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {TAG_PRESETS.map((tag) => (
+                  <Button
+                    key={tag}
+                    size="sm"
+                    variant="outline"
+                    className="h-7 rounded-full px-3 text-[11px] uppercase"
+                    onClick={() => appendPresetTag(tag)}
+                  >
+                    {tag}
+                  </Button>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setIsBulkTagOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={() => applyBulkTags({ mode: bulkMode })}>
+                  Apply Tags
                 </Button>
               </div>
             </CardContent>
