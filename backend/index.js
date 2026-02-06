@@ -57,6 +57,7 @@ const listStmt = db.prepare('SELECT * FROM files ORDER BY datetime(created_at) D
 const findStmt = db.prepare('SELECT * FROM files WHERE id = ?');
 const deleteStmt = db.prepare('DELETE FROM files WHERE id = ?');
 const updateTagsStmt = db.prepare('UPDATE files SET tags = @tags WHERE id = @id');
+const updateNameStmt = db.prepare('UPDATE files SET original_name = @original_name WHERE id = @id');
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -122,6 +123,15 @@ const suggestTags = (filename, extension) => {
   return Array.from(tags).slice(0, 8);
 };
 
+const ensureExtension = (name, extension) => {
+  if (!name) return `untitled.${extension}`;
+  const normalized = name.trim();
+  if (normalized.toLowerCase().endsWith(`.${extension}`)) {
+    return normalized;
+  }
+  return `${normalized}.${extension}`;
+};
+
 const parseTagsFromText = (text) => {
   if (!text) return [];
   let payload = text.trim();
@@ -138,6 +148,23 @@ const parseTagsFromText = (text) => {
     return [];
   }
   return [];
+};
+
+const parseSuggestionFromText = (text) => {
+  if (!text) return { tags: [], suggested_name: '' };
+  let payload = text.trim();
+  const match = payload.match(/\{[\s\S]*\}/);
+  if (match) {
+    payload = match[0];
+  }
+  try {
+    const parsed = JSON.parse(payload);
+    const tags = normalizeTags(parsed?.tags || []);
+    const suggested_name = typeof parsed?.suggested_name === 'string' ? parsed.suggested_name.trim() : '';
+    return { tags, suggested_name };
+  } catch (error) {
+    return { tags: [], suggested_name: '' };
+  }
 };
 
 const generateAiTags = async (file) => {
@@ -177,6 +204,47 @@ const generateAiTags = async (file) => {
   const text = data?.choices?.[0]?.message?.content?.trim();
   const parsed = parseTagsFromText(text);
   return parsed.length ? parsed.slice(0, 8) : suggestTags(file.original_name, file.extension);
+};
+
+const generateAiTagsAndName = async (file) => {
+  if (!OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is not configured.');
+  }
+  const prompt = `Generate 5-8 concise, lowercase tags (1-2 words) and a short, readable filename for a 3D model file. Respond with a JSON object: {\"tags\": [\"...\"], \"suggested_name\": \"...\"}. Preserve the extension .${file.extension}. File name: ${file.original_name}.`;
+  const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a tagging assistant. Return only a JSON object with tags and suggested_name.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.2,
+      max_tokens: 160
+    })
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`OpenAI error: ${response.status} ${errorBody}`);
+  }
+
+  const data = await response.json();
+  const text = data?.choices?.[0]?.message?.content?.trim();
+  const parsed = parseSuggestionFromText(text);
+  const tags = parsed.tags.length ? parsed.tags.slice(0, 8) : suggestTags(file.original_name, file.extension);
+  const suggested_name = ensureExtension(parsed.suggested_name || file.original_name, file.extension);
+  return { tags, suggested_name };
 };
 
 app.get('/api/health', (_req, res) => {
@@ -238,6 +306,17 @@ app.patch('/api/files/:id/tags', (req, res) => {
   res.json({ item: rowToItem(updated) });
 });
 
+app.patch('/api/files/:id/name', (req, res) => {
+  const item = findStmt.get(req.params.id);
+  if (!item) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  const nextName = ensureExtension(String(req.body?.name || '').trim(), item.extension);
+  updateNameStmt.run({ id: req.params.id, original_name: nextName });
+  const updated = findStmt.get(req.params.id);
+  res.json({ item: rowToItem(updated) });
+});
+
 app.post('/api/files/:id/autotag', async (req, res) => {
   const item = findStmt.get(req.params.id);
   if (!item) {
@@ -251,6 +330,23 @@ app.post('/api/files/:id/autotag', async (req, res) => {
     res.json({ item: rowToItem(updated), suggested });
   } catch (error) {
     res.status(500).json({ error: error.message || 'Auto-tagging failed.' });
+  }
+});
+
+app.post('/api/files/:id/ai-apply', async (req, res) => {
+  const item = findStmt.get(req.params.id);
+  if (!item) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  try {
+    const { tags, suggested_name } = await generateAiTagsAndName(item);
+    const serialized = serializeTags(tags);
+    updateTagsStmt.run({ id: req.params.id, tags: serialized });
+    updateNameStmt.run({ id: req.params.id, original_name: suggested_name });
+    const updated = findStmt.get(req.params.id);
+    res.json({ item: rowToItem(updated), suggested_name, tags });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'AI apply failed.' });
   }
 });
 

@@ -238,6 +238,17 @@ export default function App() {
     setSelectedFile(data.item);
   };
 
+  const handleAiTagRename = async (file) => {
+    if (!file) return;
+    const ok = window.confirm(`Run AI tag + rename for ${file.original_name}?`);
+    if (!ok) return;
+    const response = await fetch(`${API_BASE}/api/files/${file.id}/ai-apply`, { method: "POST" });
+    if (!response.ok) return;
+    const data = await response.json();
+    setFiles((prev) => prev.map((entry) => (entry.id === data.item.id ? data.item : entry)));
+    setSelectedFile(data.item);
+  };
+
   const handlePreview = (file) => {
     setSelectedFile(file);
     setIsPreviewOpen(true);
@@ -496,6 +507,9 @@ export default function App() {
                             </Button>
                             <Button size="sm" variant="secondary" onClick={() => handleAutoTag(selectedFile)}>
                               Auto Tag
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleAiTagRename(selectedFile)}>
+                              AI Tag + Rename
                             </Button>
                             <Button size="sm" variant="outline" asChild>
                               <a href={`${API_BASE}/api/files/${selectedFile.id}/file`}>Download</a>
@@ -795,6 +809,9 @@ export default function App() {
                             </Button>
                             <Button size="sm" variant="ghost" onClick={() => handleAutoTag(file)}>
                               Auto Tag
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => handleAiTagRename(file)}>
+                              AI Tag + Rename
                             </Button>
                           </div>
                         </CardContent>
