@@ -28,3 +28,13 @@ Frontend runs on `http://localhost:4200`.
 - Files are stored in `backend/data/uploads`.
 - SQLite database is stored in `backend/data/files.sqlite`.
 - If you want to change the API base, set `VITE_API_BASE` in `frontend/.env`.
+
+## Docker Compose
+
+```bash
+cd /Users/zaidalia/Documents/GitHub/PrintBuddy
+docker compose up --build
+```
+
+Frontend: `http://localhost:4200`  
+Backend: `http://localhost:4201`
