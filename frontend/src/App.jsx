@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import ThreeViewer from './components/ThreeViewer.jsx';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4201';
+const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 const sidebarItems = [
   { label: 'Library', id: 'library' },

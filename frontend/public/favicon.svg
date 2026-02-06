@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PrintBuddy">
+  <rect width="64" height="64" rx="12" fill="#0f172a" />
+  <rect x="12" y="12" width="40" height="40" rx="8" fill="#111827" stroke="#1f2937" stroke-width="2" />
+  <path d="M22 26h20v12H22z" fill="#e2e8f0" />
+  <path d="M24 20h16v6H24z" fill="#94a3b8" />
+</svg>

@@ -68,7 +68,7 @@ const upload = multer({
 });
 
 const app = express();
-app.use(cors({ origin: 'http://localhost:4200' }));
+app.use(cors({ origin: true }));
 app.use(express.json());
 
 app.get('/api/health', (_req, res) => {

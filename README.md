@@ -38,3 +38,5 @@ docker compose up --build
 
 Frontend: `http://localhost:4200`  
 Backend: `http://localhost:4201`
+
+If requests are blocked by a browser extension, disable it for localhost or keep the proxy (default) so the UI only calls `/api`.
