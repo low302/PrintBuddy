@@ -23,7 +23,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 const sidebarItems = [
   { label: "Library", id: "library" },
-  { label: "Uploads", id: "uploads" },
+  { label: "Models", id: "models" },
   { label: "Tags", id: "tags" },
   { label: "Reports", id: "reports" },
 ];
@@ -36,18 +36,61 @@ function formatBytes(bytes) {
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 }
 
+function escapeCsv(value) {
+  const stringValue = String(value ?? "");
+  if (stringValue.includes(",") || stringValue.includes("\n") || stringValue.includes('"')) {
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+  return stringValue;
+}
+
 export default function App() {
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isTagEditorOpen, setIsTagEditorOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [activePage, setActivePage] = useState("library");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [tagFilter, setTagFilter] = useState("all");
+  const [tagDraft, setTagDraft] = useState("");
+  const pageTitles = {
+    library: "Model Library",
+    models: "Models",
+    tags: "Tags",
+    reports: "Reports",
+  };
+
+  const allTags = useMemo(() => {
+    const tags = new Set();
+    files.forEach((file) => {
+      (file.tags || []).forEach((tag) => tags.add(tag));
+    });
+    return Array.from(tags).sort();
+  }, [files]);
 
   const filteredFiles = useMemo(() => {
-    if (statusFilter === "all") return files;
-    return files.filter((file) => file.extension === statusFilter);
-  }, [files, statusFilter]);
+    const query = searchQuery.trim().toLowerCase();
+    return files.filter((file) => {
+      const matchesType = statusFilter === "all" || file.extension === statusFilter;
+      const matchesTag = tagFilter === "all" || (file.tags || []).includes(tagFilter);
+      const matchesQuery =
+        !query ||
+        file.original_name.toLowerCase().includes(query) ||
+        (file.tags || []).some((tag) => tag.toLowerCase().includes(query));
+      return matchesType && matchesTag && matchesQuery;
+    });
+  }, [files, searchQuery, statusFilter, tagFilter]);
+
+  useEffect(() => {
+    if (selectedFile && filteredFiles.find((file) => file.id === selectedFile.id)) {
+      return;
+    }
+    setSelectedFile(filteredFiles[0] || null);
+  }, [filteredFiles, selectedFile]);
 
   const loadFiles = async () => {
     setIsLoading(true);
@@ -101,6 +144,74 @@ export default function App() {
     await loadFiles();
   };
 
+  const handleExportCsv = () => {
+    const headers = ["id", "original_name", "extension", "size", "created_at", "tags"];
+    const rows = filteredFiles.map((file) => [
+      file.id,
+      file.original_name,
+      file.extension,
+      file.size,
+      file.created_at,
+      (file.tags || []).join(";")
+    ]);
+    const csv = [headers, ...rows]
+      .map((row) => row.map(escapeCsv).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `printbuddy-uploads-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const openTagEditor = (file) => {
+    if (!file) return;
+    setSelectedFile(file);
+    setTagDraft((file.tags || []).join(", "));
+    setIsTagEditorOpen(true);
+  };
+
+  const parseTags = (value) => {
+    const tags = value
+      .split(",")
+      .map((tag) => tag.trim().toLowerCase())
+      .filter(Boolean);
+    return Array.from(new Set(tags));
+  };
+
+  const handleSaveTags = async () => {
+    if (!selectedFile) return;
+    const tags = parseTags(tagDraft);
+    const response = await fetch(`${API_BASE}/api/files/${selectedFile.id}/tags`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags }),
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    setFiles((prev) => prev.map((file) => (file.id === data.item.id ? data.item : file)));
+    setSelectedFile(data.item);
+    setIsTagEditorOpen(false);
+  };
+
+  const handleAutoTag = async (file) => {
+    if (!file) return;
+    const response = await fetch(`${API_BASE}/api/files/${file.id}/autotag`, { method: "POST" });
+    if (!response.ok) return;
+    const data = await response.json();
+    setFiles((prev) => prev.map((entry) => (entry.id === data.item.id ? data.item : entry)));
+    setSelectedFile(data.item);
+  };
+
+  const handlePreview = (file) => {
+    setSelectedFile(file);
+    setIsPreviewOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(30,41,59,0.6),_rgba(2,6,23,1)_55%)] text-foreground">
       <div className="flex min-h-screen">
@@ -112,7 +223,10 @@ export default function App() {
             {sidebarItems.map((item) => (
               <button
                 key={item.id}
-                className="flex h-10 w-10 items-center justify-center rounded-lg text-neutral-200 transition-colors hover:bg-white/10"
+                className={`flex h-10 w-10 items-center justify-center rounded-lg text-neutral-200 transition-colors hover:bg-white/10 ${
+                  activePage === item.id ? "bg-white/15 text-white" : ""
+                }`}
+                onClick={() => setActivePage(item.id)}
                 aria-label={item.label}
               >
                 <IconSquare />
@@ -134,7 +248,12 @@ export default function App() {
           </div>
           <div className="px-5 py-4">
             <div className="relative">
-              <Input className="pl-9" placeholder="Search files" />
+              <Input
+                className="pl-9"
+                placeholder="Search files"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
               <div className="pointer-events-none absolute left-3 top-2.5 text-muted-foreground">
                 <SearchIcon />
               </div>
@@ -145,6 +264,24 @@ export default function App() {
               <PlusIcon />
               <span className="ml-2">Upload Model</span>
             </Button>
+          </div>
+          <div className="px-5 pb-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sections</p>
+            <div className="mt-3 space-y-2">
+              {sidebarItems.slice(0, 2).map((item) => (
+                <button
+                  key={item.id}
+                  className={`w-full rounded-lg border px-3 py-2 text-left text-xs font-medium transition ${
+                    activePage === item.id
+                      ? "border-border bg-accent/60 text-foreground"
+                      : "border-border/80 bg-background/30 text-muted-foreground hover:bg-accent/40"
+                  }`}
+                  onClick={() => setActivePage(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="px-5 pb-5">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filters</p>
@@ -196,13 +333,15 @@ export default function App() {
           <header className="border-b border-border bg-card/60 px-6 py-5 backdrop-blur">
             <div className="mx-auto flex w-full max-w-[1560px] flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-foreground">Model Library</h1>
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">{pageTitles[activePage] || "Model Library"}</h1>
                 <p className="text-sm text-muted-foreground">
                   {files.length} total assets · {filteredFiles.length} matching filters
                 </p>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline">Manage Tags</Button>
+                <Button variant="outline" onClick={() => openTagEditor(selectedFile)}>
+                  Manage Tags
+                </Button>
                 <Button onClick={() => setIsUploadOpen(true)}>
                   <UploadIcon />
                   <span className="ml-2">Upload</span>
@@ -212,109 +351,289 @@ export default function App() {
           </header>
 
           <div className="mx-auto w-full max-w-[1560px] px-6 pb-10 pt-6">
-            <div className="grid gap-6 xl:min-h-[calc(100vh-220px)] xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] xl:items-stretch">
-              <Card className="flex h-full flex-col">
-                <CardHeader className="flex-row items-start justify-between space-y-0 border-b border-border pb-4">
-                  <div>
-                    <CardTitle>Inventory</CardTitle>
-                    <CardDescription>STL and 3MF assets stored locally</CardDescription>
-                  </div>
-                  <Button variant="secondary" size="sm">
-                    Export CSV
-                  </Button>
-                </CardHeader>
-                <CardContent className="flex-1 pt-4">
-                  <div className="h-full overflow-auto rounded-lg border border-border/70">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="pl-4">File</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Size</TableHead>
-                          <TableHead>Added</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {isLoading && (
-                          <TableRow>
-                            <TableCell className="py-6 text-muted-foreground" colSpan={5}>
-                              Loading files...
-                            </TableCell>
-                          </TableRow>
-                        )}
-                        {!isLoading && filteredFiles.length === 0 && (
-                          <TableRow>
-                            <TableCell className="py-8 text-muted-foreground" colSpan={5}>
-                              No files yet. Upload a STL or 3MF to begin.
-                            </TableCell>
-                          </TableRow>
-                        )}
-                        {filteredFiles.map((file) => (
-                          <TableRow key={file.id}>
-                            <TableCell className="pl-4">
-                              <div className="flex flex-col">
-                                <span className="font-medium text-foreground">{file.original_name}</span>
-                                <span className="text-xs text-muted-foreground">{file.id}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="muted" className="uppercase">
-                                {file.extension}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">{formatBytes(file.size)}</TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {new Date(file.created_at).toLocaleDateString()}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex justify-end gap-2">
-                                <Button size="sm" variant="outline" onClick={() => setSelectedFile(file)}>
-                                  View
-                                </Button>
-                                <Button size="sm" variant="outline" asChild>
-                                  <a href={`${API_BASE}/api/files/${file.id}/file`}>Download</a>
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={() => handleDelete(file)}>
-                                  Delete
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="flex h-full flex-col">
-                <CardHeader className="flex-row items-start justify-between space-y-0 border-b border-border pb-4">
-                  <div>
-                    <CardTitle>3D Preview</CardTitle>
-                    <CardDescription>Orbit, zoom, and inspect geometry</CardDescription>
-                  </div>
-                  {selectedFile && (
-                    <Badge variant="secondary" className="uppercase">
-                      {selectedFile.extension}
-                    </Badge>
-                  )}
-                </CardHeader>
-                <CardContent className="flex-1 pt-4">
-                  {selectedFile ? (
-                    <ThreeViewer
-                      fileUrl={`${API_BASE}/api/files/${selectedFile.id}/file`}
-                      extension={selectedFile.extension}
-                      className="h-full min-h-[360px]"
-                    />
-                  ) : (
-                    <div className="flex h-full min-h-[360px] items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
-                      Select a file to preview
+            {activePage === "library" && (
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader className="flex-row items-start justify-between space-y-0 border-b border-border pb-4">
+                    <div>
+                      <CardTitle>Selected Preview</CardTitle>
+                      <CardDescription>Quick look at the selected model</CardDescription>
                     </div>
-                  )}
+                    {selectedFile ? (
+                      <Badge variant="secondary" className="uppercase">
+                        {selectedFile.extension}
+                      </Badge>
+                    ) : null}
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    {selectedFile ? (
+                      <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
+                        <ThreeViewer
+                          fileUrl={`${API_BASE}/api/files/${selectedFile.id}/file`}
+                          extension={selectedFile.extension}
+                          className="h-[200px]"
+                        />
+                        <div className="flex flex-col justify-between gap-4">
+                          <div>
+                            <p className="text-lg font-semibold text-foreground">{selectedFile.original_name}</p>
+                            <p className="text-xs text-muted-foreground">{selectedFile.id}</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {(selectedFile.tags || []).length === 0 ? (
+                                <span className="text-xs text-muted-foreground">No tags yet</span>
+                              ) : (
+                                selectedFile.tags.map((tag) => (
+                                  <Badge key={tag} variant="muted">
+                                    {tag}
+                                  </Badge>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                          <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+                            <div>
+                              <p className="text-xs uppercase text-muted-foreground">Size</p>
+                              <p className="text-foreground">{formatBytes(selectedFile.size)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs uppercase text-muted-foreground">Added</p>
+                              <p className="text-foreground">
+                                {new Date(selectedFile.created_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" variant="outline" onClick={() => openTagEditor(selectedFile)}>
+                              Edit Tags
+                            </Button>
+                            <Button size="sm" variant="secondary" onClick={() => handleAutoTag(selectedFile)}>
+                              Auto Tag
+                            </Button>
+                            <Button size="sm" variant="outline" asChild>
+                              <a href={`${API_BASE}/api/files/${selectedFile.id}/file`}>Download</a>
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex h-[200px] items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
+                        Select a file to preview
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card className="flex h-full flex-col">
+                  <CardHeader className="flex-row items-start justify-between space-y-0 border-b border-border pb-4">
+                    <div>
+                      <CardTitle>Latest Uploads</CardTitle>
+                      <CardDescription>STL and 3MF assets stored locally</CardDescription>
+                    </div>
+                    <Button variant="secondary" size="sm" onClick={handleExportCsv}>
+                      Export CSV
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="flex-1 pt-4">
+                    <div className="h-full overflow-auto rounded-lg border border-border/70">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="pl-4">File</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Size</TableHead>
+                            <TableHead>Added</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {isLoading && (
+                            <TableRow>
+                              <TableCell className="py-6 text-muted-foreground" colSpan={5}>
+                                Loading files...
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          {!isLoading && filteredFiles.length === 0 && (
+                            <TableRow>
+                              <TableCell className="py-8 text-muted-foreground" colSpan={5}>
+                                No files yet. Upload a STL or 3MF to begin.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          {filteredFiles.map((file) => (
+                            <TableRow key={file.id}>
+                              <TableCell className="pl-4">
+                                <div className="flex flex-col">
+                                  <button
+                                    className="text-left font-medium text-foreground hover:underline"
+                                    onClick={() => setSelectedFile(file)}
+                                  >
+                                    {file.original_name}
+                                  </button>
+                                  <span className="text-xs text-muted-foreground">{file.id}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="muted" className="uppercase">
+                                  {file.extension}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">{formatBytes(file.size)}</TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {new Date(file.created_at).toLocaleDateString()}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex justify-end gap-2">
+                                  <Button size="sm" variant="outline" onClick={() => setSelectedFile(file)}>
+                                    View
+                                  </Button>
+                                  <Button size="sm" variant="outline" asChild>
+                                    <a href={`${API_BASE}/api/files/${file.id}/file`}>Download</a>
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={() => handleDelete(file)}>
+                                    Delete
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {activePage === "models" && (
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader className="border-b border-border pb-4">
+                    <CardTitle>Model Filters</CardTitle>
+                    <CardDescription>Filter by type, tags, and search terms</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+                        <div className="relative w-full max-w-sm">
+                          <Input
+                            className="pl-9"
+                            placeholder="Search by name or tag"
+                            value={searchQuery}
+                            onChange={(event) => setSearchQuery(event.target.value)}
+                          />
+                          <div className="pointer-events-none absolute left-3 top-2.5 text-muted-foreground">
+                            <SearchIcon />
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {["all", "stl", "3mf"].map((filter) => (
+                            <Button
+                              key={filter}
+                              size="sm"
+                              variant={statusFilter === filter ? "default" : "outline"}
+                              className="h-7 rounded-full px-3 text-[11px] uppercase"
+                              onClick={() => setStatusFilter(filter)}
+                            >
+                              {filter}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant={tagFilter === "all" ? "default" : "outline"}
+                          className="h-7 rounded-full px-3 text-[11px] uppercase"
+                          onClick={() => setTagFilter("all")}
+                        >
+                          All tags
+                        </Button>
+                        {allTags.slice(0, 6).map((tag) => (
+                          <Button
+                            key={tag}
+                            size="sm"
+                            variant={tagFilter === tag ? "default" : "outline"}
+                            className="h-7 rounded-full px-3 text-[11px] uppercase"
+                            onClick={() => setTagFilter(tag)}
+                          >
+                            {tag}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {filteredFiles.length === 0 ? (
+                  <Card>
+                    <CardContent className="py-16 text-center text-sm text-muted-foreground">
+                      No models match the current filters.
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                    {filteredFiles.map((file) => (
+                      <Card key={file.id} className="flex h-full flex-col">
+                        <CardHeader className="border-b border-border pb-4">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <CardTitle className="text-base">{file.original_name}</CardTitle>
+                              <CardDescription>{new Date(file.created_at).toLocaleDateString()}</CardDescription>
+                            </div>
+                            <Badge variant="secondary" className="uppercase">
+                              {file.extension}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="flex flex-1 flex-col gap-4 pt-4">
+                          <div className="rounded-lg border border-border/80 bg-muted/30 p-4 text-xs text-muted-foreground">
+                            {formatBytes(file.size)} · {file.id}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {(file.tags || []).length === 0 ? (
+                              <span className="text-xs text-muted-foreground">No tags</span>
+                            ) : (
+                              file.tags.map((tag) => (
+                                <Badge key={tag} variant="muted">
+                                  {tag}
+                                </Badge>
+                              ))
+                            )}
+                          </div>
+                          <div className="mt-auto flex flex-wrap gap-2">
+                            <Button size="sm" variant="outline" onClick={() => handlePreview(file)}>
+                              Preview
+                            </Button>
+                            <Button size="sm" variant="outline" asChild>
+                              <a href={`${API_BASE}/api/files/${file.id}/file`}>Download</a>
+                            </Button>
+                            <Button size="sm" variant="secondary" onClick={() => openTagEditor(file)}>
+                              Tags
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activePage === "tags" && (
+              <Card>
+                <CardContent className="py-16 text-center text-sm text-muted-foreground">
+                  Tag analytics and bulk management are coming next.
                 </CardContent>
               </Card>
-            </div>
+            )}
+
+            {activePage === "reports" && (
+              <Card>
+                <CardContent className="py-16 text-center text-sm text-muted-foreground">
+                  Reporting views will live here once metrics are enabled.
+                </CardContent>
+              </Card>
+            )}
           </div>
         </main>
       </div>
@@ -347,6 +666,73 @@ export default function App() {
                   <Button type="submit">Upload File</Button>
                 </div>
               </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {isTagEditorOpen && selectedFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-lg">
+            <CardHeader className="flex-row items-start justify-between space-y-0">
+              <div>
+                <CardTitle>Edit Tags</CardTitle>
+                <CardDescription>Separate tags with commas. Lowercase is recommended.</CardDescription>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setIsTagEditorOpen(false)}>
+                Close
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-foreground">Tags</label>
+                <Input
+                  value={tagDraft}
+                  onChange={(event) => setTagDraft(event.target.value)}
+                  className="mt-2"
+                  placeholder="utility, bracket, prototype"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="secondary" onClick={() => handleAutoTag(selectedFile)}>
+                  Auto Tag
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setTagDraft("")}
+                >
+                  Clear
+                </Button>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setIsTagEditorOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={handleSaveTags}>
+                  Save Tags
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {isPreviewOpen && selectedFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <Card className="w-full max-w-4xl">
+            <CardHeader className="flex-row items-start justify-between space-y-0 border-b border-border pb-4">
+              <div>
+                <CardTitle>Preview</CardTitle>
+                <CardDescription>{selectedFile.original_name}</CardDescription>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setIsPreviewOpen(false)}>
+                Close
+              </Button>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <ThreeViewer
+                fileUrl={`${API_BASE}/api/files/${selectedFile.id}/file`}
+                extension={selectedFile.extension}
+                className="h-[460px]"
+              />
             </CardContent>
           </Card>
         </div>

@@ -32,18 +32,25 @@ db.exec(`
     extension TEXT NOT NULL,
     size INTEGER NOT NULL,
     mime_type TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    tags TEXT DEFAULT ''
   );
 `);
 
+const columns = db.prepare('PRAGMA table_info(files)').all();
+if (!columns.find((col) => col.name === 'tags')) {
+  db.exec("ALTER TABLE files ADD COLUMN tags TEXT DEFAULT ''");
+}
+
 const insertStmt = db.prepare(`
-  INSERT INTO files (id, original_name, storage_name, extension, size, mime_type, created_at)
-  VALUES (@id, @original_name, @storage_name, @extension, @size, @mime_type, @created_at)
+  INSERT INTO files (id, original_name, storage_name, extension, size, mime_type, created_at, tags)
+  VALUES (@id, @original_name, @storage_name, @extension, @size, @mime_type, @created_at, @tags)
 `);
 
 const listStmt = db.prepare('SELECT * FROM files ORDER BY datetime(created_at) DESC');
 const findStmt = db.prepare('SELECT * FROM files WHERE id = ?');
 const deleteStmt = db.prepare('DELETE FROM files WHERE id = ?');
+const updateTagsStmt = db.prepare('UPDATE files SET tags = @tags WHERE id = @id');
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -71,15 +78,50 @@ const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
 
+const normalizeTags = (tags) => {
+  if (!tags) return [];
+  if (Array.isArray(tags)) {
+    return tags
+      .map((tag) => String(tag).trim().toLowerCase())
+      .filter(Boolean);
+  }
+  if (typeof tags === 'string') {
+    return tags
+      .split(',')
+      .map((tag) => tag.trim().toLowerCase())
+      .filter(Boolean);
+  }
+  return [];
+};
+
+const serializeTags = (tagsArray) => {
+  const unique = Array.from(new Set(tagsArray));
+  return unique.join(',');
+};
+
+const rowToItem = (row) => ({
+  ...row,
+  tags: row.tags ? row.tags.split(',').filter(Boolean) : [],
+  file_url: `/api/files/${row.id}/file`
+});
+
+const suggestTags = (filename, extension) => {
+  const name = filename.replace(new RegExp(`\\.${extension}$`, 'i'), '');
+  const tokens = name
+    .split(/[^a-zA-Z0-9]+/)
+    .map((token) => token.trim().toLowerCase())
+    .filter((token) => token.length > 1 && !['v1', 'v2', 'v3', 'final'].includes(token));
+  const tags = new Set(tokens);
+  if (extension) tags.add(extension.toLowerCase());
+  return Array.from(tags).slice(0, 8);
+};
+
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
 app.get('/api/files', (_req, res) => {
-  const items = listStmt.all().map((row) => ({
-    ...row,
-    file_url: `/api/files/${row.id}/file`
-  }));
+  const items = listStmt.all().map(rowToItem);
   res.json({ items });
 });
 
@@ -96,11 +138,12 @@ app.post('/api/files', upload.single('file'), (req, res) => {
     extension,
     size: req.file.size,
     mime_type: req.file.mimetype,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    tags: ''
   };
 
   insertStmt.run(payload);
-  res.status(201).json({ item: payload });
+  res.status(201).json({ item: rowToItem(payload) });
 });
 
 app.get('/api/files/:id', (req, res) => {
@@ -108,7 +151,7 @@ app.get('/api/files/:id', (req, res) => {
   if (!item) {
     return res.status(404).json({ error: 'Not found' });
   }
-  res.json({ item });
+  res.json({ item: rowToItem(item) });
 });
 
 app.get('/api/files/:id/file', (req, res) => {
@@ -118,6 +161,30 @@ app.get('/api/files/:id/file', (req, res) => {
   }
   const filePath = path.join(UPLOAD_DIR, item.storage_name);
   res.sendFile(filePath);
+});
+
+app.patch('/api/files/:id/tags', (req, res) => {
+  const item = findStmt.get(req.params.id);
+  if (!item) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  const normalized = normalizeTags(req.body.tags);
+  const serialized = serializeTags(normalized);
+  updateTagsStmt.run({ id: req.params.id, tags: serialized });
+  const updated = findStmt.get(req.params.id);
+  res.json({ item: rowToItem(updated) });
+});
+
+app.post('/api/files/:id/autotag', (req, res) => {
+  const item = findStmt.get(req.params.id);
+  if (!item) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  const suggested = suggestTags(item.original_name, item.extension);
+  const serialized = serializeTags(suggested);
+  updateTagsStmt.run({ id: req.params.id, tags: serialized });
+  const updated = findStmt.get(req.params.id);
+  res.json({ item: rowToItem(updated), suggested });
 });
 
 app.delete('/api/files/:id', (req, res) => {
