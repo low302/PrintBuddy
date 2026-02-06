@@ -3,3 +3,4 @@ node_modules
 backend/data
 frontend/dist
 frontend/.env
+backend/.env

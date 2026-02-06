@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
@@ -6,6 +7,8 @@ import fs from 'fs';
 import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

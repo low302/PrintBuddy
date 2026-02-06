@@ -30,6 +30,11 @@ Frontend runs on `http://localhost:4200`.
 - If you want to change the API base, set `VITE_API_BASE` in `frontend/.env`.
 - AI auto-tagging uses OpenAI. Set `OPENAI_API_KEY` (and optionally `OPENAI_MODEL=gpt-4o-mini`) in your environment.
 
+### Backend .env
+
+Create `/opt/stacks/PrintBuddy/backend/.env` (or `backend/.env` in this repo) based on:
+`/Users/zaidalia/Documents/GitHub/PrintBuddy/backend/.env.example`.
+
 ## Docker Compose
 
 ```bash
